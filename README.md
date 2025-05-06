@@ -80,3 +80,11 @@ Install required libraries:
 📜 **License**
 
 This project is licensed for academic and non-commercial use under Eco ReBoot's internal guidelines.
+
+**Project Report – Eco ReBoot**
+
+https://docs.google.com/document/d/17FkL_ZB9xD9dss2QH3zHpHJqlBvUZlvIcYO7_LaeBJM/edit?usp=sharing
+
+**CANVA presentation**
+
+https://www.canva.com/design/DAGmXgEv4og/zvbofsmC4qKFyx1xCpk-Ew/edit?utm_content=DAGmXgEv4og&utm_campaign=designshare&utm_medium=link2&utm_source=sharebutton 
