@@ -60,7 +60,8 @@ page = st.sidebar.radio("Content", [
     "Events and Impacts",
     "CO₂-Temperature Relationship",
     "Emissions by Region",
-    "Responsible Sectors"
+    "Emissions per GDP",
+    "CO₂ emissions in Spain"
 ])
 
 # --- Load data ---
@@ -125,8 +126,8 @@ elif page == "Events and Impacts":
         1860: "First Industrial Revolution",
         1910: "World War I",
         1940: "World War II",
-        1970: "Oil Crisis",
-        1990: "Fall of the USSR",
+        1950: "Postwar Period",
+        1990: "Kyoto Protocol",
         2020: "COVID-19"
         }
 
@@ -192,19 +193,73 @@ elif page == "Events and Impacts":
         font=dict(color=COLOR_PRIMARY),
         legend=dict(orientation="h", y=-0.2)
         )
-
-        # Display first row
-        st.subheader("Emissions by Decade with Historical Events")
         st.plotly_chart(fig, use_container_width=True)
 
-        # Second row: historical cumulative
-        st.subheader("Historical Cumulative Emissions up to the Selected Year")
-        df_world = df[df['territory'] == 'World']
-        df_world_filtered = df_world[df_world['year'] <= selected_year]
-        df_world_filtered['cumulative'] = df_world_filtered['co2'].cumsum()
-        fig2 = px.area(df_world_filtered, x='year', y='cumulative',
-               title='Cumulative CO₂ Over Time',
-               color_discrete_sequence=[COLOR_PRIMARY])
+        # --- Second Chart: Replaced with Median CO₂ Growth by Decade ---
+    # Ensure 'co2_growth_prct' exists in df
+        df["decade"] = (df["year"] // 10) * 10
+        decade_growth = (
+            df.groupby("decade")["co2_growth_prct"]
+            .median()
+            .reset_index()
+            .sort_values("decade")
+        )
+        decade_growth["co2_growth_prct"] = decade_growth["co2_growth_prct"].round(2)
+
+        def assign_color(value):
+            if value < -2:
+                return "#102742"   # Azul más oscuro
+            elif value < 0:
+                return "#1c3e6d"   # Azul oscuro
+            elif value < 1:
+                return "#cfe97d"   # Verde-amarillo pálido
+            elif value < 2:
+                return "#a7d86a"   # Verde lima claro
+            elif value < 3:
+                return "#71b85e"   # Verde claro
+            elif value < 4:
+                return "#37a387"   # Verde fuerte
+            elif value < 5.5:
+                return "#fad12f"   # Amarillo
+            elif value < 7:
+                return "#f8a947"   # Amarillo-naranja
+            elif value < 8.5:
+                return "#f49828"   # Naranja
+            else:
+                return "#d94300"   # Rojo quemado fuerte
+
+        decade_growth["color"] = decade_growth["co2_growth_prct"].apply(assign_color)
+
+        fig2 = px.bar(
+            decade_growth,
+            x="decade",
+            y="co2_growth_prct",
+            text="co2_growth_prct",
+            title="Median CO₂ Growth Rate by Decade (Global)",
+            labels={"co2_growth_prct": "Median CO₂ Growth (%)", "decade": "Decade"},
+            color="color",
+            color_discrete_map="identity",  # usa directamente los valores hex
+            template="plotly_white",
+            height=600
+        )
+
+        fig2.update_traces(
+            textposition="outside",
+            marker_line_color='white',
+            marker_line_width=1.5
+        )
+
+        fig2.update_layout(
+            title_font_size=24,
+            xaxis=dict(dtick=10),
+            yaxis_title="Growth (%)",
+            bargap=0.25,
+            plot_bgcolor=COLOR_BG,
+            paper_bgcolor=COLOR_BG,
+            font=dict(color=COLOR_PRIMARY),
+            showlegend=False
+        )
+
         st.plotly_chart(fig2, use_container_width=True)
 
 
@@ -212,64 +267,121 @@ elif page == "CO₂-Temperature Relationship":
     st.title("Is there a relationship between CO₂ emissions and temperature increase?")
     df_world = df[df['territory'] == 'World']
 
+    # --- Fila 1: Gráfica principal (ancho completo) ---
+    df_grouped = df_world.groupby("year").agg({
+        "co2": "mean",
+        "temperature_change_from_ghg": "mean"
+    }).reset_index()
+
+    fig = go.Figure()
+
+    fig.add_trace(go.Scatter(
+        x=df_grouped["year"],
+        y=df_grouped["temperature_change_from_ghg"],
+        mode="lines+markers",
+        name="Temperature Change (°C)",
+        line=dict(color="orange", width=3)
+    ))
+
+    fig.add_trace(go.Scatter(
+        x=df_grouped["year"],
+        y=df_grouped["co2"],
+        mode="lines",
+        name="CO₂ Emissions (Metric Tons)",
+        yaxis="y2",
+        line=dict(color="lightblue", width=3, dash="dot")
+    ))
+
+    fig.update_layout(
+        title="CO₂ Emissions and Temperature Change Over Time",
+        template="plotly_white",
+        xaxis=dict(title="Year"),
+        yaxis=dict(title="Temperature Change (°C)", side="left"),
+        yaxis2=dict(title="CO₂ Emissions (Metric Tons)", overlaying="y", side="right"),
+        legend=dict(x=0.05, y=1.1, orientation="h"),
+        height=600,
+        plot_bgcolor=COLOR_BG,
+        paper_bgcolor=COLOR_BG,
+        font=dict(color=COLOR_PRIMARY)
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+    # --- Fila 2: Dos columnas ---
     col1, col2 = st.columns(2)
     with col1:
-        st.subheader("Temperature Change by Gas")
-        df_world_temp = df_world[['year', 'temperature_change_from_ch4', 'temperature_change_from_co2', 'temperature_change_from_ghg', 'temperature_change_from_n2o']]
-        df_temp_melted = df_world_temp.melt(id_vars=['year'], var_name='gas_type', value_name='temperature_change')
-        fig1 = px.line(df_temp_melted, x="year", y="temperature_change", color='gas_type', title='Temperature Change by Gas')
-        st.plotly_chart(fig1, use_container_width=True)
+        st.subheader("Sectoral Impact on Global Temperature Rise")
 
-    with col2:
-        st.subheader("Total CO₂ Emissions")
-        fig2 = px.area(df_world, x='year', y='co2', title='Global CO₂ Emissions')
+        df_temp_sector = df_world[[
+            "year", "temperature_change_from_ghg",
+            "cement_co2", "coal_co2", "flaring_co2", "gas_co2", "oil_co2", "land_use_change_co2"
+        ]].dropna()
+
+        cor_temp = df_temp_sector.drop(columns="year").corr()
+        sector_corr = cor_temp["temperature_change_from_ghg"].drop("temperature_change_from_ghg").sort_values(ascending=False).reset_index()
+        sector_corr.columns = ["Sector", "Correlation"]
+
+        fig2 = px.bar(
+            sector_corr,
+            x="Sector",
+            y="Correlation",
+            title="Correlation Between CO₂ Emissions by Sector and Global Temperature Rise",
+            labels={"Correlation": "Correlation with Temp Change"},
+            color="Sector",
+            color_discrete_sequence=[
+                COLOR_ACCENT,
+                COLOR_PRIMARY,
+                COLOR_GREEN,
+                COLOR_YELLOW,
+                COLOR_GREEN_LIGHT,
+                "#a0aec0"  # fallback color
+            ]
+        )
+        fig2.update_layout(
+            yaxis_range=[0, 1],
+            template="plotly_white",
+            plot_bgcolor=COLOR_BG,
+            paper_bgcolor=COLOR_BG,
+            font=dict(color=COLOR_PRIMARY)
+        )
+
         st.plotly_chart(fig2, use_container_width=True)
 
-    col3, col4 = st.columns(2)
-    with col3:
-        st.subheader("CO₂ vs Temperature Comparison")
-        df_compare = df_world[['year', 'co2', 'temperature_change_from_ghg']].dropna()
-        fig3 = px.line(df_compare, x='year', y=['co2', 'temperature_change_from_ghg'], title='CO₂ and Temperature Relationship')
-        st.plotly_chart(fig3, use_container_width=True)
-
-    with col4:
-        st.subheader("CO₂ vs Temperature Scatter")
-        fig4 = px.scatter(df_compare, x='co2', y='temperature_change_from_ghg', trendline='ols', title='CO₂ vs Temperature')
-        st.plotly_chart(fig4, use_container_width=True)
-
-
-elif page == "CO₂-Temperature Relationship":
-    st.title("Is there a relationship between CO₂ emissions and temperature increase?")
-    df_world = df[df['territory'] == 'World']
-
-    col1, col2 = st.columns(2)
-    with col1:
-        st.subheader("Temperature Change by Gas")
-        df_world_temp = df_world[['year', 'temperature_change_from_ch4', 'temperature_change_from_co2', 'temperature_change_from_ghg', 'temperature_change_from_n2o']]
-        df_temp_melted = df_world_temp.melt(id_vars=['year'], var_name='gas_type', value_name='temperature_change')
-        fig1 = px.line(df_temp_melted, x="year", y="temperature_change", color='gas_type', title='Temperature Change by Gas')
-        st.plotly_chart(fig1, use_container_width=True)
-
     with col2:
-        st.subheader("Total CO₂ Emissions")
-        fig2 = px.area(df_world, x='year', y='co2', title='Global CO₂ Emissions')
-        st.plotly_chart(fig2, use_container_width=True)
+        st.subheader("Cumulative CO₂ vs Temperature Change")
 
-    col3, col4 = st.columns(2)
-    with col3:
-        st.subheader("CO₂ vs Temperature Comparison")
-        df_compare = df_world[['year', 'co2', 'temperature_change_from_ghg']].dropna()
-        fig3 = px.line(df_compare, x='year', y=['co2', 'temperature_change_from_ghg'], title='CO₂ and Temperature Relationship')
+        df_filtered_scatter = df[df["continent"] != "Unknown"].dropna(subset=[
+            "cumulative_co2_including_luc", "temperature_change_from_ghg"
+        ])
+
+        fig3 = px.scatter(
+            df_filtered_scatter,
+            x="cumulative_co2_including_luc",
+            y="temperature_change_from_ghg",
+            color="continent",
+            title="Cumulative CO₂ vs Temperature Change from GHG",
+            labels={
+                "cumulative_co2_including_luc": "Cumulative CO₂ (Metric Tons)",
+                "temperature_change_from_ghg": "Temperature Change (°C)",
+                "continent": "Continent"
+            },
+            template="plotly_white"
+        )
+
+        fig3.update_traces(marker=dict(size=7, opacity=0.6))
+        fig3.update_layout(
+            plot_bgcolor=COLOR_BG,
+            paper_bgcolor=COLOR_BG,
+            font=dict(color=COLOR_PRIMARY),
+            legend_title_text="Continent"
+        )
+
         st.plotly_chart(fig3, use_container_width=True)
 
-    with col4:
-        st.subheader("CO₂ vs Temperature Scatter")
-        fig4 = px.scatter(df_compare, x='co2', y='temperature_change_from_ghg', trendline='ols', title='CO₂ vs Temperature')
-        st.plotly_chart(fig4, use_container_width=True)
+
 
 elif page == "Emissions by Region":
     st.title("Which continents are the biggest emitters?")
-    df = pd.read_csv('dataset_visualizacion_co2.csv')
     # Primera fila: gráfica de barras ocupa toda la fila
     st.subheader("CO₂ Emissions by Continent Over Decades")
     df_continent = df[df['continent'] != 'Unknown'].groupby(["decade", "continent"], as_index=False)["co2_including_luc"].sum()
@@ -321,9 +433,8 @@ elif page == "Emissions by Region":
                        title="Country's Share of Global CO₂ Emissions")
     st.plotly_chart(fig3, use_container_width=True)
 
-elif page == "Responsible Sectors":
+elif page == "Emissions per GDP":
     st.title("Which sectors are responsible for most CO₂ emissions?")
-    df = pd.read_csv('dataset_visualizacion_co2.csv')
     # --- ROW 1 ---
     col1, col2 = st.columns(2)
 
@@ -381,38 +492,26 @@ elif page == "Responsible Sectors":
                     title='DRC: CO₂ Emissions by Source')
     st.plotly_chart(fig4, use_container_width=True)
 
-    # --- ROW 3 ---
-    col5, col6 = st.columns(2)
+elif page == "CO₂ emissions in Spain":
+    st.title("And what about Spain?")
+    df = pd.read_csv('dataset_visualizacion_co2.csv')
+    st.subheader("CO₂ emissions in Spain")
+    df_co2_ESP = df.loc[df['territory'] == 'Spain'][['year', 'cement_co2', 'co2', 'co2_including_luc', 
+            'coal_co2', 'flaring_co2', 
+            'gas_co2', 'oil_co2', 'land_use_change_co2']]
 
-    with col5:
-        st.subheader("CO₂ Emissions in China by Source")
-        df_chn = df[df['territory'] == 'China'][[
-            'year', 'cement_co2', 'co2', 'co2_including_luc',
-            'coal_co2', 'flaring_co2', 'gas_co2', 'oil_co2', 'land_use_change_co2']]
-        df_melted_chn = df_chn.melt(id_vars='year',
-                                    var_name='Source',
-                                    value_name='CO₂ Emissions')
-        fig5 = px.line(df_melted_chn,
-                       x="year",
-                       y="CO₂ Emissions",
-                       color='Source',
-                       title='China: CO₂ Emissions by Source')
-        st.plotly_chart(fig5, use_container_width=True)
+    df_melted_co2_ESP = df_co2_ESP.melt(id_vars=['year'],
+                                        value_vars=['co2', 'co2_including_luc', 'cement_co2', 'coal_co2', 'gas_co2', 'oil_co2', 'flaring_co2', 'land_use_change_co2'],
+                                        var_name='Source and Land Use',
+                                        value_name='CO₂ Emissions')
 
-    with col6:
-        st.subheader("CO₂ Emissions in the USA by Source")
-        df_usa = df[df['territory'] == 'United States'][[
-            'year', 'cement_co2', 'co2', 'co2_including_luc',
-            'coal_co2', 'flaring_co2', 'gas_co2', 'oil_co2', 'land_use_change_co2']]
-        df_melted_usa = df_usa.melt(id_vars='year',
-                                    var_name='Source',
-                                    value_name='CO₂ Emissions')
-        fig6 = px.line(df_melted_usa,
-                       x="year",
-                       y="CO₂ Emissions",
-                       color='Source',
-                       title='USA: CO₂ Emissions by Source')
-        st.plotly_chart(fig6, use_container_width=True)
+    fig5 = px.line(df_melted_co2_ESP, 
+                x="year", 
+                y="CO₂ Emissions", 
+                color='Source and Land Use',
+                title='CO₂ emissions in Spain')
+    
+    st.plotly_chart(fig5, use_container_width=True)   
 
 
 st.markdown("---")
